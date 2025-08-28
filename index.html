@@ -1,1 +1,151 @@
-Coming soon Keystage apps website
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Mouse‑reactive Circles</title>
+  <style>
+    /* Full‑bleed black background */
+    html, body { height: 100%; margin: 0; }
+    body { background: #000; overflow: hidden; }
+    canvas { display: block; width: 100vw; height: 100vh; }
+    /* Optional: tiny help hint (hidden on small screens) */
+    .hint { position: fixed; left: 12px; bottom: 12px; color: #9aa0a6; font: 12px/1.2 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; opacity: .7; user-select: none; }
+    @media (max-width: 640px) { .hint { display:none; } }
+  </style>
+</head>
+<body>
+  <canvas id="scene" aria-label="Animated circles reacting to pointer movement"></canvas>
+  <div class="hint">Move your mouse (or touch) to attract the circles.</div>
+
+  <script>
+    // ——— Setup ———
+    const canvas = document.getElementById('scene');
+    const ctx = canvas.getContext('2d');
+    let W = 0, H = 0, DPR = 1;
+
+    const TWO_PI = Math.PI * 2;
+
+    function resize() {
+      DPR = Math.min(2, window.devicePixelRatio || 1);
+      W = Math.floor(window.innerWidth);
+      H = Math.floor(window.innerHeight);
+      canvas.width = Math.max(1, W * DPR);
+      canvas.height = Math.max(1, H * DPR);
+      canvas.style.width = W + 'px';
+      canvas.style.height = H + 'px';
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    }
+    window.addEventListener('resize', resize, { passive: true });
+    resize();
+
+    // ——— Particles ———
+    // Density scales gently with screen area, but capped to keep performance nice.
+    const BASE_DENSITY = 1 / 9000; // particles per px^2 (tweak this)
+    const TARGET_COUNT = Math.min(280, Math.max(80, Math.round(W * H * BASE_DENSITY)));
+
+    const particles = [];
+    function rand(min, max) { return Math.random() * (max - min) + min; }
+
+    function makeParticle() {
+      return {
+        x: rand(0, W),
+        y: rand(0, H),
+        vx: rand(-0.25, 0.25),
+        vy: rand(-0.25, 0.25),
+        r: rand(2, 6),
+        a: rand(0.25, 0.9), // alpha
+      };
+    }
+    for (let i = 0; i < TARGET_COUNT; i++) particles.push(makeParticle());
+
+    // ——— Pointer (mouse/touch) ———
+    const pointer = { x: W / 2, y: H / 2, active: false };
+
+    function pointerFromEvent(e) {
+      const rect = canvas.getBoundingClientRect();
+      if (e.touches && e.touches[0]) {
+        return { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
+      }
+      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    }
+
+    canvas.addEventListener('mousemove', (e) => {
+      const p = pointerFromEvent(e);
+      pointer.x = p.x; pointer.y = p.y; pointer.active = true;
+    });
+    canvas.addEventListener('mouseleave', () => { pointer.active = false; });
+
+    canvas.addEventListener('touchstart', (e) => {
+      const p = pointerFromEvent(e);
+      pointer.x = p.x; pointer.y = p.y; pointer.active = true;
+    }, { passive: true });
+    canvas.addEventListener('touchmove', (e) => {
+      const p = pointerFromEvent(e);
+      pointer.x = p.x; pointer.y = p.y; pointer.active = true;
+      e.preventDefault();
+    }, { passive: false });
+    canvas.addEventListener('touchend', () => { pointer.active = false; });
+
+    // ——— Animation ———
+    const MAX_INFLUENCE = 160; // px
+    const FRICTION = 0.96;
+    const DRIFT = 0.02; // gentle ambient drift
+
+    function step() {
+      // Respect reduced motion: just draw static frame if requested.
+      const prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      ctx.clearRect(0, 0, W, H);
+
+      // Optional: subtle trail (comment out clearRect above to enable trails)
+      // ctx.fillStyle = 'rgba(0,0,0,0.15)';
+      // ctx.fillRect(0, 0, W, H);
+
+      for (let i = 0; i < particles.length; i++) {
+        const p = particles[i];
+
+        if (!prefersReduced) {
+          // Ambient drift
+          p.vx += rand(-DRIFT, DRIFT);
+          p.vy += rand(-DRIFT, DRIFT);
+
+          // Pointer attraction (flip sign to repel)
+          if (pointer.active) {
+            const dx = pointer.x - p.x;
+            const dy = pointer.y - p.y;
+            const d2 = dx * dx + dy * dy;
+            const r2 = MAX_INFLUENCE * MAX_INFLUENCE;
+            if (d2 < r2) {
+              const d = Math.sqrt(d2) || 0.0001;
+              const force = (1 - d / MAX_INFLUENCE) * 0.6; // 0..0.6
+              p.vx += (dx / d) * force;
+              p.vy += (dy / d) * force;
+            }
+          }
+
+          // Integrate & damp
+          p.vx *= FRICTION; p.vy *= FRICTION;
+          p.x += p.vx; p.y += p.vy;
+
+          // Soft wrap (teleport slightly off-screen to avoid visible popping)
+          if (p.x < -50) p.x = W + 50;
+          if (p.x > W + 50) p.x = -50;
+          if (p.y < -50) p.y = H + 50;
+          if (p.y > H + 50) p.y = -50;
+        }
+
+        // Draw
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, TWO_PI);
+        ctx.fillStyle = `rgba(255,255,255,${p.a})`;
+        ctx.fill();
+      }
+
+      requestAnimationFrame(step);
+    }
+
+    requestAnimationFrame(step);
+  </script>
+</body>
+</html>

@@ -9,6 +9,32 @@
     html, body { height: 100%; margin: 0; }
     body { background: #000; overflow: hidden; }
     canvas { display: block; width: 100vw; height: 100vh; }
+
+    /* Overlay text */
+    .overlay {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      color: #fff;
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .overlay h1 {
+      font-size: clamp(2.5rem, 6vw, 5rem);
+      margin: 0;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+    }
+    .overlay p {
+      font-size: clamp(1rem, 2.5vw, 1.5rem);
+      margin: 0.5em 0 0;
+      font-weight: 300;
+      opacity: 0.9;
+    }
+
     /* Optional: tiny help hint (hidden on small screens) */
     .hint { position: fixed; left: 12px; bottom: 12px; color: #9aa0a6; font: 12px/1.2 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; opacity: .7; user-select: none; }
     @media (max-width: 640px) { .hint { display:none; } }
@@ -16,6 +42,12 @@
 </head>
 <body>
   <canvas id="scene" aria-label="Animated circles reacting to pointer movement"></canvas>
+
+  <div class="overlay">
+    <h1>Key Stage Apps</h1>
+    <p>Coming soon</p>
+  </div>
+
   <div class="hint">Move your mouse (or touch) to attract the circles.</div>
 
   <script>
@@ -40,8 +72,7 @@
     resize();
 
     // ——— Particles ———
-    // Density scales gently with screen area, but capped to keep performance nice.
-    const BASE_DENSITY = 1 / 9000; // particles per px^2 (tweak this)
+    const BASE_DENSITY = 1 / 9000;
     const TARGET_COUNT = Math.min(280, Math.max(80, Math.round(W * H * BASE_DENSITY)));
 
     const particles = [];
@@ -54,12 +85,12 @@
         vx: rand(-0.25, 0.25),
         vy: rand(-0.25, 0.25),
         r: rand(2, 6),
-        a: rand(0.25, 0.9), // alpha
+        a: rand(0.25, 0.9),
       };
     }
     for (let i = 0; i < TARGET_COUNT; i++) particles.push(makeParticle());
 
-    // ——— Pointer (mouse/touch) ———
+    // ——— Pointer ———
     const pointer = { x: W / 2, y: H / 2, active: false };
 
     function pointerFromEvent(e) {
@@ -88,29 +119,22 @@
     canvas.addEventListener('touchend', () => { pointer.active = false; });
 
     // ——— Animation ———
-    const MAX_INFLUENCE = 160; // px
+    const MAX_INFLUENCE = 160;
     const FRICTION = 0.96;
-    const DRIFT = 0.02; // gentle ambient drift
+    const DRIFT = 0.02;
 
     function step() {
-      // Respect reduced motion: just draw static frame if requested.
       const prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
       ctx.clearRect(0, 0, W, H);
-
-      // Optional: subtle trail (comment out clearRect above to enable trails)
-      // ctx.fillStyle = 'rgba(0,0,0,0.15)';
-      // ctx.fillRect(0, 0, W, H);
 
       for (let i = 0; i < particles.length; i++) {
         const p = particles[i];
 
         if (!prefersReduced) {
-          // Ambient drift
           p.vx += rand(-DRIFT, DRIFT);
           p.vy += rand(-DRIFT, DRIFT);
 
-          // Pointer attraction (flip sign to repel)
           if (pointer.active) {
             const dx = pointer.x - p.x;
             const dy = pointer.y - p.y;
@@ -118,24 +142,21 @@
             const r2 = MAX_INFLUENCE * MAX_INFLUENCE;
             if (d2 < r2) {
               const d = Math.sqrt(d2) || 0.0001;
-              const force = (1 - d / MAX_INFLUENCE) * 0.6; // 0..0.6
+              const force = (1 - d / MAX_INFLUENCE) * 0.6;
               p.vx += (dx / d) * force;
               p.vy += (dy / d) * force;
             }
           }
 
-          // Integrate & damp
           p.vx *= FRICTION; p.vy *= FRICTION;
           p.x += p.vx; p.y += p.vy;
 
-          // Soft wrap (teleport slightly off-screen to avoid visible popping)
           if (p.x < -50) p.x = W + 50;
           if (p.x > W + 50) p.x = -50;
           if (p.y < -50) p.y = H + 50;
           if (p.y > H + 50) p.y = -50;
         }
 
-        // Draw
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r, 0, TWO_PI);
         ctx.fillStyle = `rgba(255,255,255,${p.a})`;
